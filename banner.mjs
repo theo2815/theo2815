@@ -12,10 +12,9 @@ const { GLYPHS, TRACK, SPACE, sampleStroke, strokeRadius } =
 
 const n = v => +v.toFixed(1);
 
-/* One line of text as two paths: the liquid body (discs along each skeleton stroke, as the site's
-   glass does) and a thin glint riding the upper-left of every stroke. */
+/* One line of text as a path: discs along each skeleton stroke, as the site draws its letters. */
 function line(text, cap, x0, y0, track = TRACK) {
-  let body = "", glint = "", x = 0;
+  let body = "", x = 0;
   for (const ch of text) {
     if (ch === " ") { x += SPACE; continue; }
     const strokes = GLYPHS[ch].strokes.map(stroke => {
@@ -33,12 +32,10 @@ function line(text, cap, x0, y0, track = TRACK) {
         const cx = x0 + (x - left + px) * cap, cy = y0 + py * cap, rr = r * cap;
         body += `M${n(cx - rr)} ${n(cy)}a${n(rr)} ${n(rr)} 0 1 0 ${n(2 * rr)} 0a${n(rr)} ${n(rr)} 0 1 0 ${n(-2 * rr)} 0`;
       });
-      glint += pts.filter((_, i) => i % 6 === 0 || i === pts.length - 1).map(([px, py, r], i) =>
-        `${i ? "L" : "M"}${n(x0 + (x - left + px - r * 0.3) * cap)} ${n(y0 + (py - r * 0.34) * cap)}`).join("");
     }
     x += right - left + track;
   }
-  return { body, glint, width: (x - track) * cap };
+  return { body, width: (x - track) * cap };
 }
 
 const W = 880, FRAME = 150, GAP = 38, TEXT_X = FRAME + GAP;
@@ -57,18 +54,12 @@ const PW = FRAME * 1.6, PH = PW * meta.height / meta.width;
 const glasses = { x: 0.3385 * PW - 0.29 * FRAME, y: 0.351 * PH, w: 0.312 * PW };
 const inner = file => readFileSync(path.join(site, "public", file), "utf8").replace(/^<svg[^>]*>|<\/svg>\s*$/g, "");
 
+/* Plain, flat colour (the user's call, 2026-10-09: no glass effect here): GitHub's own text and
+   secondary-text colours for each theme, so the banner reads like the page around it. */
 const themes = {
-  light: { ink: "#26313b", shine: "#6f808e", core: "rgba(255,255,255,.2)", paper: "#f4f1ea", edge: "rgba(16,26,33,.16)", pair: "sunglasses-day.svg" },
-  dark: { ink: "#e9e6df", shine: "#ffffff", core: "rgba(255,255,255,.55)", paper: "#181410", edge: "rgba(242,238,230,.2)", pair: "eyeglasses.svg" },
+  light: { ink: "#1f2328", soft: "#59636e", paper: "#f4f1ea", edge: "rgba(16,26,33,.16)", pair: "sunglasses-day.svg" },
+  dark: { ink: "#f0f6fc", soft: "#9198a1", paper: "#181410", edge: "rgba(242,238,230,.2)", pair: "eyeglasses.svg" },
 };
-
-/* Readability first, as on the site: the letter keeps its solid ink and its crisp edge. The only
-   glass cue is a soft lighter core, pulled in from the edge and nudged toward the light. */
-const glass = (id, inset, c) => `<filter id="${id}" x="-2%" y="-10%" width="104%" height="120%" color-interpolation-filters="sRGB">
-<feMorphology in="SourceAlpha" operator="erode" radius="${inset}"/><feGaussianBlur stdDeviation="${n(inset * 0.8)}"/><feOffset dx="${n(-inset * 0.35)}" dy="${n(-inset * 0.5)}" result="core"/>
-<feFlood flood-color="${c.core}"/><feComposite in2="core" operator="in"/><feComposite in2="SourceAlpha" operator="in" result="sheen"/>
-<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="sheen"/></feMerge>
-</filter>`;
 
 for (const [theme, c] of Object.entries(themes)) {
   const crop = await sharp(photo).resize(Math.round(PW * 2))
@@ -77,19 +68,14 @@ for (const [theme, c] of Object.entries(themes)) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Theo Cedric Chan, full-stack developer">
 <defs>
 <clipPath id="frame"><rect x="1" y="10" width="${FRAME}" height="${FRAME}" rx="20"/></clipPath>
-<linearGradient id="glass" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${W}" y2="0">
-<stop offset=".4" stop-color="${c.ink}"/><stop offset=".5" stop-color="${c.shine}"/><stop offset=".6" stop-color="${c.ink}"/>
-<animateTransform attributeName="gradientTransform" type="translate" values="${-W} 0;${W} 0;${W} 0" keyTimes="0;.3;1" dur="8s" repeatCount="indefinite"/>
-</linearGradient>
-${glass("bead", 1.7, c)}
 </defs>
 <g clip-path="url(#frame)">
 <image x="1" y="10" width="${FRAME}" height="${FRAME}" href="data:image/jpeg;base64,${crop.toString("base64")}"/>
 <svg x="${n(1 + glasses.x)}" y="${n(10 + glasses.y)}" width="${n(glasses.w)}" height="${n(glasses.w * 205 / 600)}" viewBox="0 8 600 205">${inner(c.pair)}</svg>
 </g>
 <rect x="1" y="10" width="${FRAME}" height="${FRAME}" rx="20" fill="none" stroke="${c.edge}"/>
-<path d="${name.body}" fill="url(#glass)" filter="url(#bead)"/>
-<path d="${role.body}" fill="${c.ink}" opacity=".72"/>
+<path d="${name.body}" fill="${c.ink}"/>
+<path d="${role.body}" fill="${c.soft}"/>
 </svg>
 `;
   writeFileSync(`assets/banner-${theme}.svg`, svg);
