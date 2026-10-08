@@ -58,22 +58,16 @@ const glasses = { x: 0.3385 * PW - 0.29 * FRAME, y: 0.351 * PH, w: 0.312 * PW };
 const inner = file => readFileSync(path.join(site, "public", file), "utf8").replace(/^<svg[^>]*>|<\/svg>\s*$/g, "");
 
 const themes = {
-  light: { ink: "#33404b", shine: "#93a3b0", spec: 0.95, shadow: "rgba(16,26,33,.28)", paper: "#f4f1ea", edge: "rgba(16,26,33,.16)", pair: "sunglasses-day.svg" },
-  dark: { ink: "#b9b7b1", shine: "#f4f2ec", spec: 1.15, shadow: "rgba(0,0,0,.5)", paper: "#181410", edge: "rgba(242,238,230,.2)", pair: "eyeglasses.svg" },
+  light: { ink: "#26313b", shine: "#6f808e", core: "rgba(255,255,255,.2)", paper: "#f4f1ea", edge: "rgba(16,26,33,.16)", pair: "sunglasses-day.svg" },
+  dark: { ink: "#e9e6df", shine: "#ffffff", core: "rgba(255,255,255,.55)", paper: "#181410", edge: "rgba(242,238,230,.2)", pair: "eyeglasses.svg" },
 };
 
-/* The glass: the letters' own alpha, blurred, is the height of a rounded bead. A light from the
-   upper left shades the body (diffuse, multiplied in) and leaves a bright streak along every
-   stroke (specular, added on top); a soft shadow underneath lifts it off the page. */
-const glass = (id, blur, c) => `<filter id="${id}" x="-3%" y="-25%" width="106%" height="160%" color-interpolation-filters="sRGB">
-<feGaussianBlur in="SourceAlpha" stdDeviation="${blur}" result="bead"/>
-<feDiffuseLighting in="bead" surfaceScale="${n(blur * 2.6)}" diffuseConstant="1.12" lighting-color="#fff" result="shade"><feDistantLight azimuth="235" elevation="58"/></feDiffuseLighting>
-<feComposite in="SourceGraphic" in2="shade" operator="arithmetic" k1="1" result="body"/>
-<feSpecularLighting in="bead" surfaceScale="${n(blur * 2.6)}" specularConstant="${c.spec}" specularExponent="34" lighting-color="#fff" result="streak"><feDistantLight azimuth="235" elevation="50"/></feSpecularLighting>
-<feComposite in="streak" in2="SourceAlpha" operator="in" result="streakIn"/>
-<feComposite in="streakIn" in2="body" operator="arithmetic" k2="1" k3="1" result="lit"/>
-<feGaussianBlur in="SourceAlpha" stdDeviation="${n(blur * 1.1)}"/><feOffset dy="${n(blur * 1.3)}" result="under"/><feFlood flood-color="${c.shadow}"/><feComposite in2="under" operator="in"/>
-<feMerge><feMergeNode/><feMergeNode in="lit"/></feMerge>
+/* Readability first, as on the site: the letter keeps its solid ink and its crisp edge. The only
+   glass cue is a soft lighter core, pulled in from the edge and nudged toward the light. */
+const glass = (id, inset, c) => `<filter id="${id}" x="-2%" y="-10%" width="104%" height="120%" color-interpolation-filters="sRGB">
+<feMorphology in="SourceAlpha" operator="erode" radius="${inset}"/><feGaussianBlur stdDeviation="${n(inset * 0.8)}"/><feOffset dx="${n(-inset * 0.35)}" dy="${n(-inset * 0.5)}" result="core"/>
+<feFlood flood-color="${c.core}"/><feComposite in2="core" operator="in"/><feComposite in2="SourceAlpha" operator="in" result="sheen"/>
+<feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="sheen"/></feMerge>
 </filter>`;
 
 for (const [theme, c] of Object.entries(themes)) {
@@ -87,7 +81,7 @@ for (const [theme, c] of Object.entries(themes)) {
 <stop offset=".4" stop-color="${c.ink}"/><stop offset=".5" stop-color="${c.shine}"/><stop offset=".6" stop-color="${c.ink}"/>
 <animateTransform attributeName="gradientTransform" type="translate" values="${-W} 0;${W} 0;${W} 0" keyTimes="0;.3;1" dur="8s" repeatCount="indefinite"/>
 </linearGradient>
-${glass("bead", 2.3, c)}${glass("bead-small", 1.1, c)}
+${glass("bead", 1.7, c)}
 </defs>
 <g clip-path="url(#frame)">
 <image x="1" y="10" width="${FRAME}" height="${FRAME}" href="data:image/jpeg;base64,${crop.toString("base64")}"/>
@@ -95,7 +89,7 @@ ${glass("bead", 2.3, c)}${glass("bead-small", 1.1, c)}
 </g>
 <rect x="1" y="10" width="${FRAME}" height="${FRAME}" rx="20" fill="none" stroke="${c.edge}"/>
 <path d="${name.body}" fill="url(#glass)" filter="url(#bead)"/>
-<path d="${role.body}" fill="${c.ink}" filter="url(#bead-small)" opacity=".78"/>
+<path d="${role.body}" fill="${c.ink}" opacity=".72"/>
 </svg>
 `;
   writeFileSync(`assets/banner-${theme}.svg`, svg);
