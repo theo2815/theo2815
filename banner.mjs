@@ -27,8 +27,8 @@ function line(text, cap, x0, y0, track = TRACK) {
     for (const pts of strokes) {
       let last = null;
       pts.forEach(([px, py, r], i) => {
-        // Discs closer than 0.4r apart add nothing the eye can see.
-        if (last && i < pts.length - 1 && Math.hypot(px - last[0], py - last[1]) < 0.4 * r) return;
+        // Discs closer than 0.28r apart add nothing the eye can see.
+        if (last && i < pts.length - 1 && Math.hypot(px - last[0], py - last[1]) < 0.28 * r) return;
         last = [px, py];
         const cx = x0 + (x - left + px) * cap, cy = y0 + py * cap, rr = r * cap;
         body += `M${n(cx - rr)} ${n(cy)}a${n(rr)} ${n(rr)} 0 1 0 ${n(2 * rr)} 0a${n(rr)} ${n(rr)} 0 1 0 ${n(-2 * rr)} 0`;
@@ -58,9 +58,23 @@ const glasses = { x: 0.3385 * PW - 0.29 * FRAME, y: 0.351 * PH, w: 0.312 * PW };
 const inner = file => readFileSync(path.join(site, "public", file), "utf8").replace(/^<svg[^>]*>|<\/svg>\s*$/g, "");
 
 const themes = {
-  light: { ink: "#2f3a44", shine: "#8b99a5", glint: "rgba(255,255,255,.42)", paper: "#f4f1ea", edge: "rgba(16,26,33,.16)", pair: "sunglasses-day.svg" },
-  dark: { ink: "#d6d3cc", shine: "#ffffff", glint: "rgba(255,255,255,.8)", paper: "#181410", edge: "rgba(242,238,230,.2)", pair: "eyeglasses.svg" },
+  light: { ink: "#33404b", shine: "#93a3b0", spec: 0.95, shadow: "rgba(16,26,33,.28)", paper: "#f4f1ea", edge: "rgba(16,26,33,.16)", pair: "sunglasses-day.svg" },
+  dark: { ink: "#b9b7b1", shine: "#f4f2ec", spec: 1.15, shadow: "rgba(0,0,0,.5)", paper: "#181410", edge: "rgba(242,238,230,.2)", pair: "eyeglasses.svg" },
 };
+
+/* The glass: the letters' own alpha, blurred, is the height of a rounded bead. A light from the
+   upper left shades the body (diffuse, multiplied in) and leaves a bright streak along every
+   stroke (specular, added on top); a soft shadow underneath lifts it off the page. */
+const glass = (id, blur, c) => `<filter id="${id}" x="-3%" y="-25%" width="106%" height="160%" color-interpolation-filters="sRGB">
+<feGaussianBlur in="SourceAlpha" stdDeviation="${blur}" result="bead"/>
+<feDiffuseLighting in="bead" surfaceScale="${n(blur * 2.6)}" diffuseConstant="1.12" lighting-color="#fff" result="shade"><feDistantLight azimuth="235" elevation="58"/></feDiffuseLighting>
+<feComposite in="SourceGraphic" in2="shade" operator="arithmetic" k1="1" result="body"/>
+<feSpecularLighting in="bead" surfaceScale="${n(blur * 2.6)}" specularConstant="${c.spec}" specularExponent="34" lighting-color="#fff" result="streak"><feDistantLight azimuth="235" elevation="50"/></feSpecularLighting>
+<feComposite in="streak" in2="SourceAlpha" operator="in" result="streakIn"/>
+<feComposite in="streakIn" in2="body" operator="arithmetic" k2="1" k3="1" result="lit"/>
+<feGaussianBlur in="SourceAlpha" stdDeviation="${n(blur * 1.1)}"/><feOffset dy="${n(blur * 1.3)}" result="under"/><feFlood flood-color="${c.shadow}"/><feComposite in2="under" operator="in"/>
+<feMerge><feMergeNode/><feMergeNode in="lit"/></feMerge>
+</filter>`;
 
 for (const [theme, c] of Object.entries(themes)) {
   const crop = await sharp(photo).resize(Math.round(PW * 2))
@@ -73,15 +87,15 @@ for (const [theme, c] of Object.entries(themes)) {
 <stop offset=".4" stop-color="${c.ink}"/><stop offset=".5" stop-color="${c.shine}"/><stop offset=".6" stop-color="${c.ink}"/>
 <animateTransform attributeName="gradientTransform" type="translate" values="${-W} 0;${W} 0;${W} 0" keyTimes="0;.3;1" dur="8s" repeatCount="indefinite"/>
 </linearGradient>
+${glass("bead", 2.3, c)}${glass("bead-small", 1.1, c)}
 </defs>
 <g clip-path="url(#frame)">
 <image x="1" y="10" width="${FRAME}" height="${FRAME}" href="data:image/jpeg;base64,${crop.toString("base64")}"/>
 <svg x="${n(1 + glasses.x)}" y="${n(10 + glasses.y)}" width="${n(glasses.w)}" height="${n(glasses.w * 205 / 600)}" viewBox="0 8 600 205">${inner(c.pair)}</svg>
 </g>
 <rect x="1" y="10" width="${FRAME}" height="${FRAME}" rx="20" fill="none" stroke="${c.edge}"/>
-<path d="${name.body}" fill="url(#glass)"/>
-<path d="${name.glint}" fill="none" stroke="${c.glint}" stroke-width="${n(nameCap * 0.034)}" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="${role.body}" fill="${c.ink}" opacity=".66"/>
+<path d="${name.body}" fill="url(#glass)" filter="url(#bead)"/>
+<path d="${role.body}" fill="${c.ink}" filter="url(#bead-small)" opacity=".78"/>
 </svg>
 `;
   writeFileSync(`assets/banner-${theme}.svg`, svg);
